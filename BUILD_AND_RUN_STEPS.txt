@@ -1,0 +1,295 @@
+HMI PROJECT - BUILD AND RUN STEPS
+=====================================
+
+This document contains all the steps I followed to build and run the various components of the HMI project.
+
+PROJECT OVERVIEW
+================
+The HMI project contains multiple sub-projects:
+1. OpenMU - MMORPG game server (C#/.NET)
+2. DotSpatial - GIS mapping library
+3. GeoBlazor - Blazor-based mapping components
+4. MonolithicGeoApp - Geospatial console application
+5. GeoCountriesApp - Blazor web app for country data
+6. Various other geospatial utilities
+
+ENVIRONMENT SETUP
+================
+Operating System: Linux (AWS CodeSpaces/Workspaces)
+Base Directory: /workspaces/HMI
+Required Tools:
+- Docker & Docker Compose
+- .NET 8+ SDK
+- Node.js 16+
+- PostgreSQL
+- Git
+
+STEP-BY-STEP BUILD AND RUN PROCESS
+==================================
+
+1. INITIAL PROJECT EXPLORATION
+------------------------------
+- Navigated to /workspaces/HMI
+- Examined project structure using directory listing
+- Identified main components and their purposes
+- Read documentation files (README.md, QuickStart.md, etc.)
+
+2. OPENMU GAME SERVER SETUP
+---------------------------
+Description: Set up and run the OpenMU MMORPG server using Docker
+
+Steps Followed:
+a) Navigate to OpenMU deployment directory:
+   cd /workspaces/HMI/OpenMU/deploy/all-in-one
+
+b) Start services using Docker Compose:
+   docker compose up -d
+
+c) Verify services are running:
+   docker compose ps
+
+d) Check service logs:
+   docker compose logs -f openmu-startup
+   docker compose logs -f database
+   docker compose logs -f nginx-80
+
+Results:
+- PostgreSQL Database running on port 5433
+- Game Servers running on ports 55901-55906
+- Connect Servers on ports 44405-44406
+- Chat Server on port 55980
+- Admin Panel accessible at http://localhost (port 80)
+- Default admin credentials: admin/openmu
+
+Status: ✅ SUCCESSFULLY RUNNING
+
+3. DOTSPATIAL LIBRARY SETUP
+---------------------------
+Description: GIS mapping library for .NET applications
+
+Steps Followed:
+a) Navigate to DotSpatial directory:
+   cd /workspaces/HMI/DotSpatial/Source
+
+b) Restore NuGet packages:
+   dotnet restore DotSpatial.sln
+
+c) Build the solution:
+   dotnet build DotSpatial.sln
+
+Status: Available for use in other applications
+
+4. MONOLITHIC GEO APPLICATION
+-----------------------------
+Description: Console application for geospatial data processing
+
+Steps Followed:
+a) Navigate to application directory:
+   cd /workspaces/HMI/MonolithicGeoApp
+
+b) Restore dependencies:
+   dotnet restore
+
+c) Build the application:
+   dotnet build
+
+d) Run the application:
+   dotnet run
+
+Status: Built and ready to run
+
+5. GEO COUNTRIES BLAZOR APP
+---------------------------
+Description: Web application for displaying country geospatial data
+
+Steps Followed:
+a) Navigate to application directory:
+   cd /workspaces/HMI/GeoCountriesApp
+
+b) Restore dependencies:
+   dotnet restore
+
+c) Build the application:
+   dotnet build
+
+d) Run the application:
+   dotnet run
+
+Expected Result: Web app accessible at http://localhost:5000
+
+6. GEOBLAZOR COMPONENTS
+----------------------
+Description: Blazor components for mapping functionality
+
+Steps Followed:
+a) Navigate to source directory:
+   cd /workspaces/HMI/GeoBlazor/src
+
+b) Restore dependencies:
+   dotnet restore dymaptic.GeoBlazor.Core.sln
+
+c) Build the solution:
+   dotnet build dymaptic.GeoBlazor.Core.sln
+
+Status: Components available for integration
+
+7. MICROSERVICES SETUP
+----------------------
+Description: Node.js based microservices
+
+Steps Followed:
+a) Navigate to microservices directory:
+   cd /workspaces/HMI/microservices
+
+b) Install dependencies:
+   npm install
+
+Status: Ready for development
+
+8. GEOSPATIAL DATA PROCESSING
+-----------------------------
+Description: Python scripts for data conversion and processing
+
+Files Available:
+- convert_to_geojson.py - Convert spatial data to GeoJSON
+- generate_map_links.py - Generate mapping links
+- Sample data files: india_cities.geojson, india_districts.geojson, etc.
+
+Steps to Use:
+python convert_to_geojson.py
+python generate_map_links.py
+
+DOCKER DEPLOYMENT CONFIGURATIONS
+================================
+
+OpenMU All-in-One Deployment:
+- Location: /workspaces/HMI/OpenMU/deploy/all-in-one
+- Command: docker compose up -d
+- Services: Database, Game Servers, Admin Panel
+
+DotSpatialApp Docker:
+- Dockerfile available in /workspaces/HMI/DotSpatialApp
+- AWS deployment scripts included
+
+GeoCountriesApp Docker:
+- Dockerfile available in /workspaces/HMI/GeoCountriesApp
+- AWS deployment script: deploy-aws.sh
+
+AWS DEPLOYMENT OPTIONS
+=====================
+
+Quick Start AWS Installation:
+- Script: /workspaces/HMI/install-dotspatial-aws.sh
+- Creates EC2 Windows instance
+- Auto-installs .NET 8 and DotSpatial
+- Provides RDP access
+
+Manual AWS Deployment:
+- Various deploy-aws.sh scripts in project directories
+- CloudFormation templates available
+- EC2 and WorkSpaces deployment options
+
+TESTING AND VALIDATION
+======================
+
+OpenMU Server Testing:
+- Admin Panel: http://localhost
+- Test accounts: test0-test9, testgm, test300, test400
+- Password = username for all test accounts
+
+Application Testing:
+- Each .NET application can be tested with: dotnet run
+- Web applications accessible via localhost on various ports
+- Docker containers can be monitored with: docker compose logs
+
+TROUBLESHOOTING STEPS FOLLOWED
+==============================
+
+1. Port Conflicts:
+   - Checked for port availability before starting services
+   - Used docker compose ps to verify running services
+
+2. Database Issues:
+   - PostgreSQL runs in Docker container on port 5433
+   - Connection strings configured in OpenMU settings
+
+3. Build Failures:
+   - Ensured .NET 8+ SDK was available
+   - Restored NuGet packages before building
+   - Checked for missing dependencies
+
+4. Docker Issues:
+   - Verified Docker daemon is running
+   - Used docker compose down/up for clean restarts
+   - Checked container logs for errors
+
+CURRENT STATUS SUMMARY
+======================
+
+✅ OpenMU Game Server: RUNNING (Docker)
+✅ DotSpatial Library: BUILT
+✅ MonolithicGeoApp: BUILT
+✅ GeoCountriesApp: BUILT
+✅ GeoBlazor Components: BUILT
+✅ Microservices: CONFIGURED
+✅ Geospatial Data: AVAILABLE
+
+NEXT STEPS FOR USERS
+====================
+
+1. Access OpenMU Admin Panel at http://localhost
+2. Change default admin password
+3. Configure game settings as needed
+4. Download MU Online client for testing
+5. Run individual applications as needed:
+   - dotnet run (for .NET apps)
+   - docker compose up -d (for containerized services)
+
+MAINTENANCE COMMANDS
+===================
+
+Stop all OpenMU services:
+docker compose down
+
+Start OpenMU services:
+docker compose up -d
+
+View service status:
+docker compose ps
+
+View logs:
+docker compose logs -f [service-name]
+
+Restart services:
+docker compose restart
+
+RESOURCE REQUIREMENTS
+=====================
+
+Minimum System Requirements:
+- 4GB RAM
+- 2 CPU cores
+- 10GB disk space
+- Docker support
+
+Network Ports Used:
+- 80: Admin Panel
+- 5433: PostgreSQL Database
+- 55901-55906: Game Servers
+- 44405-44406: Connect Servers
+- 55980: Chat Server
+
+DOCUMENTATION REFERENCES
+========================
+
+- /workspaces/HMI/README.md - Main project overview
+- /workspaces/HMI/QUICKSTART.md - AWS deployment guide
+- /workspaces/HMI/OpenMU/QuickStart.md - OpenMU setup guide
+- /workspaces/HMI/OpenMU/README.md - OpenMU project details
+- /workspaces/HMI/OpenMU/deploy/README.md - Deployment options
+- /workspaces/HMI/OpenMU/RUNNING.md - Current running status
+
+END OF DOCUMENTATION
+====================
+Generated: $(date)
+Project Path: /workspaces/HMI

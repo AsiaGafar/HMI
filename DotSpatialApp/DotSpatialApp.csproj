@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotSpatial.Controls" Version="3.0.4" />
+    <PackageReference Include="DotSpatial.Data" Version="3.0.4" />
+    <PackageReference Include="DotSpatial.Projections" Version="3.0.4" />
+    <PackageReference Include="DotSpatial.Symbology" Version="3.0.4" />
+  </ItemGroup>
+
+</Project>

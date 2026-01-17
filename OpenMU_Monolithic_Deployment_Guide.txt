@@ -1,0 +1,338 @@
+OpenMU Monolithic AWS Deployment Guide
+======================================
+
+OVERVIEW:
+This guide deploys OpenMU as a single monolithic application with embedded database
+and all services running in one container/instance for simplified management.
+
+PREREQUISITES:
+- AWS CLI installed and configured
+- Docker knowledge (basic)
+- OpenMU project files
+
+================================================================================
+MONOLITHIC DEPLOYMENT APPROACH
+================================================================================
+
+STEP 1: CREATE MONOLITHIC DOCKERFILE
+Create Dockerfile.monolithic:
+
+```dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
+WORKDIR /app
+
+# Install SQLite for embedded database
+RUN apt-get update && apt-get install -y sqlite3 libsqlite3-dev
+
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet restore
+RUN dotnet build -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+
+# Copy SQLite database initialization
+COPY --from=build /src/data/openmu.db /app/data/
+COPY --from=build /src/config/ /app/config/
+
+# Expose all required ports in single container
+EXPOSE 80 44405 44406 55901 55902 55903 55904 55905 55906 55980
+
+# Single entry point for all services
+ENTRYPOINT ["dotnet", "MUnique.OpenMU.Startup.dll", "--monolithic"]
+```
+
+STEP 2: CREATE MONOLITHIC CONFIGURATION
+Create appsettings.monolithic.json:
+
+```json
+{
+  "ConnectionStrings": {
+    "Default": "Data Source=/app/data/openmu.db"
+  },
+  "MonolithicMode": true,
+  "EmbeddedDatabase": true,
+  "Services": {
+    "AdminPanel": { "Port": 80, "Enabled": true },
+    "ConnectServer": { "Port": 44405, "Enabled": true },
+    "LoginServer": { "Port": 44406, "Enabled": true },
+    "GameServer1": { "Port": 55901, "Enabled": true },
+    "GameServer2": { "Port": 55902, "Enabled": true },
+    "GameServer3": { "Port": 55903, "Enabled": true },
+    "GameServer4": { "Port": 55904, "Enabled": true },
+    "GameServer5": { "Port": 55905, "Enabled": true },
+    "GameServer6": { "Port": 55906, "Enabled": true },
+    "ChatServer": { "Port": 55980, "Enabled": true }
+  }
+}
+```
+
+STEP 3: CREATE MONOLITHIC STARTUP SCRIPT
+Create startup-monolithic.sh:
+
+```bash
+#!/bin/bash
+# File: startup-monolithic.sh
+
+# Initialize SQLite database if not exists
+if [ ! -f /app/data/openmu.db ]; then
+    echo "Initializing embedded database..."
+    sqlite3 /app/data/openmu.db < /app/config/init.sql
+fi
+
+# Start all services in background
+echo "Starting OpenMU Monolithic Server..."
+
+# Start admin panel
+dotnet MUnique.OpenMU.AdminPanel.dll --port 80 &
+
+# Start connect server
+dotnet MUnique.OpenMU.ConnectServer.dll --port 44405 &
+
+# Start login server  
+dotnet MUnique.OpenMU.LoginServer.dll --port 44406 &
+
+# Start game servers
+for port in 55901 55902 55903 55904 55905 55906; do
+    dotnet MUnique.OpenMU.GameServer.dll --port $port &
+done
+
+# Start chat server
+dotnet MUnique.OpenMU.ChatServer.dll --port 55980 &
+
+# Keep container running
+wait
+```
+
+STEP 4: BUILD MONOLITHIC IMAGE
+```bash
+# Build the monolithic image
+docker build -f Dockerfile.monolithic -t openmu-monolithic:latest .
+
+# Test locally
+docker run -p 80:80 -p 44405-44406:44405-44406 -p 55901-55906:55901-55906 -p 55980:55980 openmu-monolithic:latest
+```
+
+================================================================================
+AWS EC2 MONOLITHIC DEPLOYMENT
+================================================================================
+
+STEP 1: CREATE DEPLOYMENT SCRIPT
+Create deploy-monolithic.sh:
+
+```bash
+#!/bin/bash
+# File: deploy-monolithic.sh
+
+set -e
+
+# Configuration
+AWS_REGION="us-east-1"
+KEY_NAME="openmu-mono-key"
+INSTANCE_TYPE="t3.xlarge"  # 4 vCPU, 16GB RAM for monolithic
+APP_NAME="openmu-monolithic"
+
+echo "🚀 Deploying OpenMU Monolithic on AWS..."
+
+# Create key pair
+aws ec2 create-key-pair \
+  --key-name $KEY_NAME \
+  --query 'KeyMaterial' \
+  --output text > $KEY_NAME.pem 2>/dev/null || echo "Key exists"
+chmod 400 $KEY_NAME.pem
+
+# Create security group
+SG_ID=$(aws ec2 create-security-group \
+  --group-name ${APP_NAME}-sg \
+  --description "OpenMU Monolithic Server" \
+  --query 'GroupId' \
+  --output text 2>/dev/null || \
+  aws ec2 describe-security-groups \
+  --group-names ${APP_NAME}-sg \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+# Single security group rule for all ports
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 44405-44406 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 55901-55906 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 55980 --cidr 0.0.0.0/0 2>/dev/null || true
+
+# Launch instance with monolithic user data
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id ami-0c02fb55956c7d316 \
+  --instance-type $INSTANCE_TYPE \
+  --key-name $KEY_NAME \
+  --security-group-ids $SG_ID \
+  --user-data file://user-data-monolithic.sh \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$APP_NAME}]" \
+  --query 'Instances[0].InstanceId' \
+  --output text)
+
+echo "⏳ Waiting for instance to start..."
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+
+PUBLIC_IP=$(aws ec2 describe-instances \
+  --instance-ids $INSTANCE_ID \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)
+
+echo "✅ OpenMU Monolithic Server deployed!"
+echo "Instance ID: $INSTANCE_ID"
+echo "Public IP: $PUBLIC_IP"
+echo "Admin Panel: http://$PUBLIC_IP"
+echo "All services running on single instance"
+```
+
+STEP 2: CREATE MONOLITHIC USER DATA
+Create user-data-monolithic.sh:
+
+```bash
+#!/bin/bash
+# File: user-data-monolithic.sh
+
+# Update system
+yum update -y
+
+# Install Docker
+yum install -y docker
+systemctl start docker
+systemctl enable docker
+usermod -a -G docker ec2-user
+
+# Install Git and build tools
+yum install -y git
+
+# Clone and build monolithic version
+cd /home/ec2-user
+git clone https://github.com/MUnique/OpenMU.git
+cd OpenMU
+
+# Copy monolithic configuration
+cp /tmp/Dockerfile.monolithic .
+cp /tmp/appsettings.monolithic.json .
+cp /tmp/startup-monolithic.sh .
+
+# Build monolithic image
+docker build -f Dockerfile.monolithic -t openmu-monolithic:latest .
+
+# Run monolithic container
+docker run -d \
+  --name openmu-mono \
+  --restart unless-stopped \
+  -p 80:80 \
+  -p 44405:44405 \
+  -p 44406:44406 \
+  -p 55901:55901 \
+  -p 55902:55902 \
+  -p 55903:55903 \
+  -p 55904:55904 \
+  -p 55905:55905 \
+  -p 55906:55906 \
+  -p 55980:55980 \
+  -v /home/ec2-user/openmu-data:/app/data \
+  openmu-monolithic:latest
+
+# Create systemd service
+cat > /etc/systemd/system/openmu-monolithic.service << EOF
+[Unit]
+Description=OpenMU Monolithic Server
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker start openmu-mono
+ExecStop=/usr/bin/docker stop openmu-mono
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable openmu-monolithic.service
+chown -R ec2-user:ec2-user /home/ec2-user
+```
+
+================================================================================
+AWS LIGHTSAIL MONOLITHIC (SIMPLEST)
+================================================================================
+
+STEP 1: CREATE LIGHTSAIL MONOLITHIC INSTANCE
+```bash
+aws lightsail create-instances \
+  --instance-names openmu-monolithic \
+  --availability-zone us-east-1a \
+  --blueprint-id ubuntu_20_04 \
+  --bundle-id large_2_0 \
+  --user-data file://lightsail-monolithic.sh
+```
+
+STEP 2: OPEN ALL PORTS AT ONCE
+```bash
+# Single command to open all required ports
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-monolithic \
+  --port-info fromPort=80,toPort=80,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-monolithic \
+  --port-info fromPort=44405,toPort=44406,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-monolithic \
+  --port-info fromPort=55901,toPort=55906,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-monolithic \
+  --port-info fromPort=55980,toPort=55980,protocol=TCP
+```
+
+================================================================================
+MONOLITHIC BENEFITS & CONSIDERATIONS
+================================================================================
+
+BENEFITS:
+✅ Single deployment unit
+✅ Simplified configuration
+✅ No network latency between services
+✅ Easier debugging and monitoring
+✅ Lower infrastructure costs
+✅ Embedded database (no external dependencies)
+
+CONSIDERATIONS:
+⚠️  Single point of failure
+⚠️  Harder to scale individual components
+⚠️  Larger resource requirements per instance
+⚠️  All services restart together
+⚠️  Limited horizontal scaling options
+
+DEPLOYMENT COMMANDS:
+```bash
+# Deploy monolithic version
+chmod +x deploy-monolithic.sh
+./deploy-monolithic.sh
+
+# Check status
+docker logs openmu-mono
+
+# Access services
+curl http://[PUBLIC_IP]  # Admin panel
+telnet [PUBLIC_IP] 44405  # Connect server
+```
+
+MONITORING:
+```bash
+# Check all services in one container
+docker exec openmu-mono ps aux
+docker exec openmu-mono netstat -tlnp
+docker stats openmu-mono
+```

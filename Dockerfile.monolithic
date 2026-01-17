@@ -1,0 +1,13 @@
+# OpenMU is ALREADY monolithic - this just uses the official image
+FROM munique/openmu:latest
+
+# OpenMU already runs all services in one process:
+# - GameServers (55901-55906)
+# - LoginServer (44406) 
+# - ConnectServer (44405)
+# - ChatServer (55980)
+# - AdminPanel (8080)
+# - All use single database connection
+
+# All ports are already exposed in the base image
+# The startup process already starts all services together

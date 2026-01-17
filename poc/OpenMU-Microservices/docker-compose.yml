@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build:
+      context: ./AuthService/AuthService
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    networks:
+      - openmu-network
+
+  chat-service:
+    build:
+      context: ./ChatService/ChatService
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AUTH_SERVICE_URL=http://auth-service:5001
+    depends_on:
+      - auth-service
+    networks:
+      - openmu-network
+
+  friend-service:
+    build:
+      context: ./FriendService/FriendService
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5003"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AUTH_SERVICE_URL=http://auth-service:5001
+    depends_on:
+      - auth-service
+    networks:
+      - openmu-network
+
+networks:
+  openmu-network:
+    driver: bridge

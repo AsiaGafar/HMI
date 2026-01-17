@@ -1,0 +1,20 @@
+@page "/map"
+@rendermode InteractiveServer
+
+<PageTitle>Geo Countries Map</PageTitle>
+
+<h3>World Countries Map</h3>
+
+<div id="map" style="height: 600px; width: 100%;"></div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("initMap");
+        }
+    }
+}
+
+@inject IJSRuntime JS

@@ -1,0 +1,23 @@
+{
+  "name": "microservices-demo",
+  "version": "1.0.0",
+  "description": "API Gateway and Microservices Demo",
+  "main": "gateway.js",
+  "scripts": {
+    "gateway": "node gateway.js",
+    "user-service": "node services/user-service.js",
+    "product-service": "node services/product-service.js",
+    "order-service": "node services/order-service.js",
+    "start-all": "concurrently \"npm run user-service\" \"npm run product-service\" \"npm run order-service\" \"npm run gateway\""
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

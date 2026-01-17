@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/ApiGateway/">
+    <Project Path="ApiGateway/ApiGateway/ApiGateway.csproj" />
+  </Folder>
+  <Folder Name="/AuthService/">
+    <Project Path="AuthService/AuthService/AuthService.csproj" />
+  </Folder>
+  <Folder Name="/ChatService/">
+    <Project Path="ChatService/ChatService/ChatService.csproj" />
+  </Folder>
+  <Folder Name="/FriendService/">
+    <Project Path="FriendService/FriendService/FriendService.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="Shared/OpenMU.Shared/OpenMU.Shared.csproj" />
+  </Folder>
+</Solution>

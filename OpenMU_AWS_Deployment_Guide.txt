@@ -1,0 +1,398 @@
+OpenMU AWS Deployment Guide
+============================
+
+OVERVIEW:
+This guide provides step-by-step instructions to deploy OpenMU game server on AWS
+using multiple deployment strategies suitable for different scales and requirements.
+
+PREREQUISITES:
+- AWS CLI installed and configured
+- AWS account with appropriate permissions
+- Docker knowledge (basic)
+- OpenMU project files
+
+DEPLOYMENT OPTIONS:
+
+Option 1: EC2 Single Instance (Recommended for Small-Medium Scale)
+Option 2: ECS with Fargate (Recommended for Production)
+Option 3: EKS Kubernetes (Enterprise Scale)
+Option 4: Lightsail (Simplest/Cheapest)
+
+================================================================================
+OPTION 1: EC2 SINGLE INSTANCE DEPLOYMENT
+================================================================================
+
+STEP 1: PREPARE DEPLOYMENT SCRIPT
+Create deployment script for EC2:
+
+```bash
+#!/bin/bash
+# File: deploy-openmu-aws.sh
+
+set -e
+
+# Configuration
+AWS_REGION="us-east-1"
+KEY_NAME="openmu-key"
+INSTANCE_TYPE="t3.large"  # 2 vCPU, 8GB RAM
+APP_NAME="openmu-server"
+
+echo "🚀 Deploying OpenMU on AWS EC2..."
+
+# Create key pair
+echo "📝 Creating SSH key pair..."
+aws ec2 create-key-pair \
+  --key-name $KEY_NAME \
+  --query 'KeyMaterial' \
+  --output text > $KEY_NAME.pem 2>/dev/null || echo "Key exists"
+chmod 400 $KEY_NAME.pem
+
+# Create security group
+echo "🔒 Setting up security group..."
+SG_ID=$(aws ec2 create-security-group \
+  --group-name ${APP_NAME}-sg \
+  --description "OpenMU Game Server" \
+  --query 'GroupId' \
+  --output text 2>/dev/null || \
+  aws ec2 describe-security-groups \
+  --group-names ${APP_NAME}-sg \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+# Configure security group rules
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 443 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 44405-44406 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 55901-55906 --cidr 0.0.0.0/0 2>/dev/null || true
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 55980 --cidr 0.0.0.0/0 2>/dev/null || true
+
+# Launch instance
+echo "🖥️  Launching EC2 instance..."
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id ami-0c02fb55956c7d316 \
+  --instance-type $INSTANCE_TYPE \
+  --key-name $KEY_NAME \
+  --security-group-ids $SG_ID \
+  --user-data file://user-data.sh \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$APP_NAME}]" \
+  --query 'Instances[0].InstanceId' \
+  --output text)
+
+echo "⏳ Waiting for instance to start..."
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+
+PUBLIC_IP=$(aws ec2 describe-instances \
+  --instance-ids $INSTANCE_ID \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)
+
+echo "✅ OpenMU Server deployed successfully!"
+echo "Instance ID: $INSTANCE_ID"
+echo "Public IP: $PUBLIC_IP"
+echo "Admin Panel: http://$PUBLIC_IP"
+echo "SSH: ssh -i $KEY_NAME.pem ec2-user@$PUBLIC_IP"
+```
+
+STEP 2: CREATE USER DATA SCRIPT
+Create user-data.sh for automatic setup:
+
+```bash
+#!/bin/bash
+# File: user-data.sh
+
+# Update system
+yum update -y
+
+# Install Docker
+yum install -y docker
+systemctl start docker
+systemctl enable docker
+usermod -a -G docker ec2-user
+
+# Install Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# Install Git
+yum install -y git
+
+# Clone OpenMU repository
+cd /home/ec2-user
+git clone https://github.com/MUnique/OpenMU.git
+chown -R ec2-user:ec2-user OpenMU
+
+# Start OpenMU services
+cd OpenMU/deploy/all-in-one
+docker-compose up -d
+
+# Create systemd service for auto-start
+cat > /etc/systemd/system/openmu.service << EOF
+[Unit]
+Description=OpenMU Game Server
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ec2-user/OpenMU/deploy/all-in-one
+ExecStart=/usr/local/bin/docker-compose up -d
+ExecStop=/usr/local/bin/docker-compose down
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable openmu.service
+```
+
+STEP 3: DEPLOY TO AWS
+Execute deployment:
+
+```bash
+chmod +x deploy-openmu-aws.sh
+./deploy-openmu-aws.sh
+```
+
+STEP 4: VERIFY DEPLOYMENT
+After 5-10 minutes:
+- Access Admin Panel: http://[PUBLIC_IP]
+- Login: admin / openmu
+- Check all services are running
+
+================================================================================
+OPTION 2: ECS WITH FARGATE (PRODUCTION RECOMMENDED)
+================================================================================
+
+STEP 1: CREATE ECS CLUSTER
+```bash
+aws ecs create-cluster --cluster-name openmu-cluster
+```
+
+STEP 2: CREATE TASK DEFINITION
+Create task-definition.json:
+
+```json
+{
+  "family": "openmu-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "openmu-database",
+      "image": "postgres:13",
+      "memory": 1024,
+      "environment": [
+        {"name": "POSTGRES_DB", "value": "openmu"},
+        {"name": "POSTGRES_USER", "value": "openmu"},
+        {"name": "POSTGRES_PASSWORD", "value": "openmu123"}
+      ],
+      "portMappings": [
+        {"containerPort": 5432, "protocol": "tcp"}
+      ]
+    },
+    {
+      "name": "openmu-server",
+      "image": "munique/openmu:latest",
+      "memory": 2048,
+      "dependsOn": [
+        {"containerName": "openmu-database", "condition": "HEALTHY"}
+      ],
+      "portMappings": [
+        {"containerPort": 80, "protocol": "tcp"},
+        {"containerPort": 44405, "protocol": "tcp"},
+        {"containerPort": 44406, "protocol": "tcp"},
+        {"containerPort": 55901, "protocol": "tcp"},
+        {"containerPort": 55902, "protocol": "tcp"},
+        {"containerPort": 55903, "protocol": "tcp"},
+        {"containerPort": 55904, "protocol": "tcp"},
+        {"containerPort": 55905, "protocol": "tcp"},
+        {"containerPort": 55906, "protocol": "tcp"},
+        {"containerPort": 55980, "protocol": "tcp"}
+      ]
+    }
+  ]
+}
+```
+
+STEP 3: REGISTER TASK DEFINITION
+```bash
+aws ecs register-task-definition --cli-input-json file://task-definition.json
+```
+
+STEP 4: CREATE SERVICE
+```bash
+aws ecs create-service \
+  --cluster openmu-cluster \
+  --service-name openmu-service \
+  --task-definition openmu-task \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-12345],securityGroups=[sg-12345],assignPublicIp=ENABLED}"
+```
+
+================================================================================
+OPTION 3: AWS LIGHTSAIL (SIMPLEST/CHEAPEST)
+================================================================================
+
+STEP 1: CREATE LIGHTSAIL INSTANCE
+```bash
+aws lightsail create-instances \
+  --instance-names openmu-server \
+  --availability-zone us-east-1a \
+  --blueprint-id ubuntu_20_04 \
+  --bundle-id medium_2_0 \
+  --user-data file://lightsail-user-data.sh
+```
+
+STEP 2: OPEN PORTS
+```bash
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-server \
+  --port-info fromPort=80,toPort=80,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-server \
+  --port-info fromPort=44405,toPort=44406,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-server \
+  --port-info fromPort=55901,toPort=55906,protocol=TCP
+
+aws lightsail open-instance-public-ports \
+  --instance-name openmu-server \
+  --port-info fromPort=55980,toPort=55980,protocol=TCP
+```
+
+================================================================================
+OPTION 4: LOAD BALANCED PRODUCTION SETUP
+================================================================================
+
+For high-availability production deployment:
+
+STEP 1: CREATE APPLICATION LOAD BALANCER
+```bash
+aws elbv2 create-load-balancer \
+  --name openmu-alb \
+  --subnets subnet-12345 subnet-67890 \
+  --security-groups sg-12345
+```
+
+STEP 2: CREATE TARGET GROUPS
+```bash
+# Admin Panel Target Group
+aws elbv2 create-target-group \
+  --name openmu-admin-tg \
+  --protocol HTTP \
+  --port 80 \
+  --vpc-id vpc-12345
+
+# Game Server Target Groups (for each port)
+aws elbv2 create-target-group \
+  --name openmu-game-tg \
+  --protocol TCP \
+  --port 44405 \
+  --vpc-id vpc-12345
+```
+
+STEP 3: CREATE AUTO SCALING GROUP
+```bash
+aws autoscaling create-auto-scaling-group \
+  --auto-scaling-group-name openmu-asg \
+  --launch-template LaunchTemplateName=openmu-template \
+  --min-size 1 \
+  --max-size 3 \
+  --desired-capacity 2 \
+  --target-group-arns arn:aws:elasticloadbalancing:region:account:targetgroup/openmu-admin-tg
+```
+
+================================================================================
+COST ESTIMATES
+================================================================================
+
+Option 1 (EC2 t3.large): ~$60-80/month
+Option 2 (ECS Fargate): ~$50-70/month
+Option 3 (Lightsail): ~$20-40/month
+Option 4 (Production): ~$150-300/month
+
+================================================================================
+MONITORING AND MAINTENANCE
+================================================================================
+
+CLOUDWATCH MONITORING:
+```bash
+# Create CloudWatch dashboard
+aws cloudwatch put-dashboard \
+  --dashboard-name OpenMU-Dashboard \
+  --dashboard-body file://dashboard.json
+```
+
+BACKUP STRATEGY:
+```bash
+# Create RDS snapshot (if using RDS)
+aws rds create-db-snapshot \
+  --db-instance-identifier openmu-db \
+  --db-snapshot-identifier openmu-backup-$(date +%Y%m%d)
+```
+
+LOG MONITORING:
+```bash
+# Create log group
+aws logs create-log-group --log-group-name /aws/openmu/application
+```
+
+================================================================================
+SECURITY BEST PRACTICES
+================================================================================
+
+1. Use IAM roles instead of access keys
+2. Enable VPC Flow Logs
+3. Use AWS Secrets Manager for passwords
+4. Enable CloudTrail for audit logging
+5. Use Security Groups with minimal required ports
+6. Enable AWS Config for compliance monitoring
+7. Use AWS WAF for web application firewall
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+COMMON ISSUES:
+1. Port connectivity - Check security groups
+2. Database connection - Verify environment variables
+3. Memory issues - Monitor CloudWatch metrics
+4. SSL certificates - Use AWS Certificate Manager
+
+USEFUL COMMANDS:
+```bash
+# Check ECS service status
+aws ecs describe-services --cluster openmu-cluster --services openmu-service
+
+# View logs
+aws logs tail /aws/ecs/openmu --follow
+
+# Scale service
+aws ecs update-service --cluster openmu-cluster --service openmu-service --desired-count 2
+```
+
+================================================================================
+NEXT STEPS AFTER DEPLOYMENT
+================================================================================
+
+1. Access Admin Panel at http://[PUBLIC_IP]
+2. Login with admin/openmu
+3. Change default password immediately
+4. Configure game settings
+5. Set up SSL certificate (recommended)
+6. Configure domain name
+7. Set up monitoring and alerts
+8. Create backup strategy
+9. Test game client connectivity
+10. Configure auto-scaling if needed
+
+This completes the comprehensive AWS deployment guide for OpenMU.

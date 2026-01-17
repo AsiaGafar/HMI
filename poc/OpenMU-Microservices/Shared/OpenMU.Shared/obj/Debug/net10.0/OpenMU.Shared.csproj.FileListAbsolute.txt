@@ -1,0 +1,12 @@
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.GeneratedMSBuildEditorConfig.editorconfig
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.AssemblyInfoInputs.cache
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.AssemblyInfo.cs
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.csproj.CoreCompileInputs.cache
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.sourcelink.json
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.dll
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/refint/OpenMU.Shared.dll
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/OpenMU.Shared.pdb
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/bin/Debug/net10.0/OpenMU.Shared.deps.json
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/bin/Debug/net10.0/OpenMU.Shared.dll
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/bin/Debug/net10.0/OpenMU.Shared.pdb
+/workspaces/HMI/poc/OpenMU-Microservices/Shared/OpenMU.Shared/obj/Debug/net10.0/ref/OpenMU.Shared.dll
